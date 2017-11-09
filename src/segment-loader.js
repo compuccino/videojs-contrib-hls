@@ -658,13 +658,15 @@ export default class SegmentLoader extends videojs.EventTarget {
 
       syncPointError = lastBufferedStart - currentTime;
 
-      videojs.log.warn('We are slightly off the trail. Your playlist might be having a gap or the initial sync-point was bad for another reason.', 
-        'Sync-error is:', syncPointError
-      );
+      videojs.log.warn('The playlist might have an unexpected gap.', 
+        'Seek point is behind buffered time-range start by:', 
+        syncPointError,
+        'seconds.',
+        'Trying to correct buffering range based on current sync-point.');
 
       // try to enforce loading at sync-point
       mediaIndex = null;
-      currentTime = lastBufferedEnd = syncPoint.time;
+      currentTime = lastBufferedEnd = lastBufferedStart - playlist.targetDuration;
     }
 
     // When the syncPoint is null, there is no way of determining a good
@@ -1127,10 +1129,14 @@ export default class SegmentLoader extends videojs.EventTarget {
 
     const timelineMapping = this.syncController_.mappingForTimeline(segmentInfo.timeline);
     const absoluteTimestampOffset = segmentInfo.timestampOffset - timelineMapping;
+    // resolve to absolute offset only for live playlists
+    const resolvedTimestampOffset = this.playlist_.endList ? segmentInfo.timestampOffset : absoluteTimestampOffset;
 
     if (segmentInfo.timestampOffset !== null 
-      && absoluteTimestampOffset !== this.sourceUpdater_.timestampOffset()) {
-      this.sourceUpdater_.timestampOffset(absoluteTimestampOffset);
+      && resolvedTimestampOffset !== this.sourceUpdater_.timestampOffset()) {
+
+      this.sourceUpdater_.timestampOffset(resolvedTimestampOffset);
+
       // fired when a timestamp offset is set in HLS (can also identify discontinuities)
       this.trigger('timestampoffset');
     }
