@@ -664,9 +664,8 @@ export default class SegmentLoader extends videojs.EventTarget {
         'seconds.',
         'Trying to correct buffering range based on current sync-point.');
 
-      // try to enforce loading at sync-point
-      mediaIndex = null;
-      currentTime = lastBufferedEnd = lastBufferedStart - playlist.targetDuration;
+        this.trigger('sync-error');
+        return null;
     }
 
     // When the syncPoint is null, there is no way of determining a good
