@@ -592,10 +592,12 @@ export default class SegmentLoader extends videojs.EventTarget {
    * @returns {Object} a segment request object that describes the segment to load
    */
   checkBuffer_(buffered, playlist, mediaIndex, hasPlayed, currentTime, syncPoint) {
+    let lastBufferedStart = 0;
     let lastBufferedEnd = 0;
     let startOfSegment;
 
     if (buffered.length) {
+      lastBufferedStart = buffered.start(buffered.length - 1);
       lastBufferedEnd = buffered.end(buffered.length - 1);
     }
 
@@ -650,6 +652,21 @@ export default class SegmentLoader extends videojs.EventTarget {
       'syncPoint:', syncPoint,
       'fetchAtBuffer:', this.fetchAtBuffer_,
       'bufferedTime:', bufferedTime);
+
+    let syncPointError = 0;
+    if (currentTime < lastBufferedStart) {
+
+      syncPointError = lastBufferedStart - currentTime;
+
+      videojs.log.warn('The playlist might have an unexpected gap.', 
+        'Seek point is behind buffered time-range start by:', 
+        syncPointError,
+        'seconds.',
+        'Trying to correct buffering range based on current sync-point.');
+
+        this.trigger('sync-error');
+        return null;
+    }
 
     // When the syncPoint is null, there is no way of determining a good
     // conservative segment index to fetch from
@@ -1109,9 +1126,16 @@ export default class SegmentLoader extends videojs.EventTarget {
       return;
     }
 
-    if (segmentInfo.timestampOffset !== null &&
-        segmentInfo.timestampOffset !== this.sourceUpdater_.timestampOffset()) {
-      this.sourceUpdater_.timestampOffset(segmentInfo.timestampOffset);
+    const timelineMapping = this.syncController_.mappingForTimeline(segmentInfo.timeline);
+    const absoluteTimestampOffset = segmentInfo.timestampOffset - timelineMapping;
+    // resolve to absolute offset only for live playlists
+    const resolvedTimestampOffset = this.playlist_.endList ? segmentInfo.timestampOffset : absoluteTimestampOffset;
+
+    if (segmentInfo.timestampOffset !== null 
+      && resolvedTimestampOffset !== this.sourceUpdater_.timestampOffset()) {
+
+      this.sourceUpdater_.timestampOffset(resolvedTimestampOffset);
+
       // fired when a timestamp offset is set in HLS (can also identify discontinuities)
       this.trigger('timestampoffset');
     }

@@ -575,7 +575,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
 
     this.lastSelectedPlaylist_ = playlist;
 
-    console.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
+    videojs.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
 
     return playlist;
   }
@@ -707,6 +707,21 @@ export class MasterPlaylistController extends videojs.EventTarget {
     });
 
     this.subtitleSegmentLoader_.on('error', this.handleSubtitleError_.bind(this));
+
+    this.audioSegmentLoader_.on('sync-error', this.handleSyncError_.bind(this));
+    this.mainSegmentLoader_.on('sync-error', this.handleSyncError_.bind(this));
+  }
+
+  // Handles a sync error by skipping to the next buffered range start
+  handleSyncError_() {
+    let lastBufferedStart = 0;
+    let lastBufferedEnd = 0;
+    let buffered = this.tech_.buffered();
+    if (buffered.length) {
+      lastBufferedStart = buffered.start(buffered.length - 1);
+      lastBufferedEnd = buffered.end(buffered.length - 1);
+      this.tech_.setCurrentTime(lastBufferedStart);
+    }
   }
 
   handleVideoinfoUpdate_(event) {
