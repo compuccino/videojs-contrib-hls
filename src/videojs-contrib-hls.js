@@ -295,6 +295,7 @@ class HlsHandler extends Component {
     this.options_.maxVideoHeight = this.options_.maxVideoHeight || Infinity;
     this.options_.maxBandwidth = this.options_.maxBandwidth || Infinity;
     this.options_.autoLimitResolution = this.options_.autoLimitResolution || true;
+    this.options_.goalBufferLength = this.options_.goalBufferLength || null;
 
     if (typeof this.options_.blacklistDuration !== 'number') {
       this.options_.blacklistDuration = 5 * 60;
