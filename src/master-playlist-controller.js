@@ -285,6 +285,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
       useCueTags,
       blacklistDuration,
       goalBufferLength,
+      enableLowInitialPlaylist
     } = options;
 
     if (!url) {
@@ -1945,14 +1946,6 @@ export class MasterPlaylistController extends videojs.EventTarget {
    * @return {Number} Desired forward buffer length in seconds
    */
   goalBufferLength() {
-
-    const options = this.hls_.options_;
-
-    if (options.goalBufferLength !== null) {
-
-      return options.goalBufferLength();
-    }
-
     const currentTime = this.tech_.currentTime();
     const initial = Config.GOAL_BUFFER_LENGTH;
     const rate = Config.GOAL_BUFFER_LENGTH_RATE;
