@@ -590,7 +590,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
 
     this.lastSelectedPlaylist_ = playlist;
 
-    console.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
+    //console.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
 
     return playlist;
   }
@@ -1946,8 +1946,11 @@ export class MasterPlaylistController extends videojs.EventTarget {
    */
   goalBufferLength() {
 
-    if (this.options_.goalBufferLength !== null) {
-      return this.options_.goalBufferLength();
+    const options = this.hls_.options_;
+
+    if (options.goalBufferLength !== null) {
+
+      return options.goalBufferLength();
     }
 
     const currentTime = this.tech_.currentTime();
