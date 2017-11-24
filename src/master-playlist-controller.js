@@ -12,9 +12,6 @@ import { translateLegacyCodecs } from 'videojs-contrib-media-sources/es5/codec-u
 import worker from 'webworkify';
 import Decrypter from './decrypter-worker';
 import Config from './config';
-import { parseCodecs } from './util/codecs.js';
-
-const ABORT_EARLY_BLACKLIST_SECONDS = 60 * 2;
 
 let Hls;
 
@@ -66,6 +63,36 @@ const objectChanged = function(a, b) {
     }
   }
   return false;
+};
+
+/**
+ * Parses a codec string to retrieve the number of codecs specified,
+ * the video codec and object type indicator, and the audio profile.
+ *
+ * @private
+ */
+const parseCodecs = function(codecs) {
+  let result = {
+    codecCount: 0
+  };
+  let parsed;
+
+  result.codecCount = codecs.split(',').length;
+  result.codecCount = result.codecCount || 2;
+
+  // parse the video codec
+  parsed = (/(^|\s|,)+(avc1)([^ ,]*)/i).exec(codecs);
+  if (parsed) {
+    result.videoCodec = parsed[2];
+    result.videoObjectTypeIndicator = parsed[3];
+  }
+
+  // parse the last field of the audio codec
+  result.audioProfile =
+    (/(^|\s|,)+mp4a.[0-9A-Fa-f]+\.([0-9A-Fa-f]+)/i).exec(codecs);
+  result.audioProfile = result.audioProfile && result.audioProfile[2];
+
+  return result;
 };
 
 /**
@@ -257,6 +284,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
       externHls,
       useCueTags,
       blacklistDuration,
+      goalBufferLength,
       enableLowInitialPlaylist
     } = options;
 
@@ -279,7 +307,6 @@ export class MasterPlaylistController extends videojs.EventTarget {
     this.mode_ = mode;
     this.useCueTags_ = useCueTags;
     this.blacklistDuration = blacklistDuration;
-    this.enableLowInitialPlaylist = enableLowInitialPlaylist;
     if (this.useCueTags_) {
       this.cueTagsTrack_ = this.tech_.addTextTrack('metadata',
         'ad-cues');
@@ -294,7 +321,6 @@ export class MasterPlaylistController extends videojs.EventTarget {
     this.audioGroups_ = {};
     this.videoGroups_ = {};
     this.subtitleGroups_ = { groups: {}, tracks: {} };
-    this.closedCaptionGroups_ = { groups: {}, tracks: {} };
 
     this.mediaSource = new videojs.MediaSource({ mode });
     this.audioInfo_ = null;
@@ -312,7 +338,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
     this.segmentMetadataTrack_ = tech.addRemoteTextTrack({
       kind: 'metadata',
       label: 'segment-metadata'
-    }, false).track;
+    }, true).track;
 
     this.decrypter_ = worker(Decrypter);
 
@@ -414,7 +440,6 @@ export class MasterPlaylistController extends videojs.EventTarget {
       this.setupSubtitles();
 
       this.triggerPresenceUsage_(this.master(), media);
-      this.fillClosedCaptionTracks_();
 
       try {
         this.setupSourceBuffers_();
@@ -433,17 +458,8 @@ export class MasterPlaylistController extends videojs.EventTarget {
       let updatedPlaylist = this.masterPlaylistLoader_.media();
 
       if (!updatedPlaylist) {
-        let selectedMedia;
-
-        if (this.enableLowInitialPlaylist) {
-          selectedMedia = this.selectInitialPlaylist();
-        }
-
-        if (!selectedMedia) {
-          selectedMedia = this.selectPlaylist();
-        }
-
-        this.initialMedia_ = selectedMedia;
+        // select the initial variant
+        this.initialMedia_ = this.selectPlaylist();
         this.addToSwitchPlaylistHistory_(this.initialMedia_);
         this.masterPlaylistLoader_.media(this.initialMedia_);
         return;
@@ -575,7 +591,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
 
     this.lastSelectedPlaylist_ = playlist;
 
-    videojs.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
+    //console.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
 
     return playlist;
   }
@@ -683,17 +699,6 @@ export class MasterPlaylistController extends videojs.EventTarget {
       this.onEndOfStream();
     });
 
-    this.mainSegmentLoader_.on('earlyabort', () => {
-      this.blacklistCurrentPlaylist({
-        message: 'Aborted early because there isn\'t enough bandwidth to complete the ' +
-          'request without rebuffering.'
-      }, ABORT_EARLY_BLACKLIST_SECONDS);
-    });
-
-    this.mainSegmentLoader_.on('reseteverything', () => {
-      this.tech_.trigger('hls-reset');
-    });
-
     this.audioSegmentLoader_.on('ended', () => {
       this.onEndOfStream();
     });
@@ -707,21 +712,6 @@ export class MasterPlaylistController extends videojs.EventTarget {
     });
 
     this.subtitleSegmentLoader_.on('error', this.handleSubtitleError_.bind(this));
-
-    this.audioSegmentLoader_.on('sync-error', this.handleSyncError_.bind(this));
-    this.mainSegmentLoader_.on('sync-error', this.handleSyncError_.bind(this));
-  }
-
-  // Handles a sync error by skipping to the next buffered range start
-  handleSyncError_() {
-    let lastBufferedStart = 0;
-    let lastBufferedEnd = 0;
-    let buffered = this.tech_.buffered();
-    if (buffered.length) {
-      lastBufferedStart = buffered.start(buffered.length - 1);
-      lastBufferedEnd = buffered.end(buffered.length - 1);
-      this.tech_.setCurrentTime(lastBufferedStart);
-    }
   }
 
   handleVideoinfoUpdate_(event) {
@@ -954,7 +944,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
               enabled: false,
               language: properties.language,
               label
-            }, false).track;
+            }, true).track;
 
             this.subtitleGroups_.tracks[label] = track;
           }
@@ -963,49 +953,6 @@ export class MasterPlaylistController extends videojs.EventTarget {
     }
 
     // Do not enable a default subtitle track. Wait for user interaction instead.
-  }
-
-  /**
-   * fill our internal list of Captions Tracks with data from
-   * the master playlist or use a default
-   *
-   * @private
-   */
-  fillClosedCaptionTracks_() {
-    let master = this.master();
-    let mediaGroups = master.mediaGroups || {};
-
-    for (let mediaGroup in mediaGroups['CLOSED-CAPTIONS']) {
-      if (!this.closedCaptionGroups_.groups[mediaGroup]) {
-        this.closedCaptionGroups_.groups[mediaGroup] = [];
-      }
-
-      for (let label in mediaGroups['CLOSED-CAPTIONS'][mediaGroup]) {
-        let properties = mediaGroups['CLOSED-CAPTIONS'][mediaGroup][label];
-
-        // We only support CEA608 captions for now, so ignore anything that
-        // doesn't use a CCx INSTREAM-ID
-        if (!properties.instreamId.match(/CC\d/)) {
-          continue;
-        }
-
-        this.closedCaptionGroups_.groups[mediaGroup].push(
-          videojs.mergeOptions({ id: label }, properties));
-
-        if (typeof this.closedCaptionGroups_.tracks[label] === 'undefined') {
-          let track = this.tech_.addRemoteTextTrack({
-            id: properties.instreamId,
-            kind: 'captions',
-            enabled: false,
-            language: properties.language,
-            label
-          }, false).track;
-
-          this.closedCaptionGroups_.tracks[label] = track;
-        }
-      }
-    }
-
   }
 
   /**
@@ -1620,10 +1567,8 @@ export class MasterPlaylistController extends videojs.EventTarget {
    *
    * @param {Object=} error an optional error that may include the playlist
    * to blacklist
-   * @param {Number=} blacklistDuration an optional number of seconds to blacklist the
-   * playlist
    */
-  blacklistCurrentPlaylist(error = {}, blacklistDuration) {
+  blacklistCurrentPlaylist(error = {}) {
     let currentPlaylist;
     let nextPlaylist;
 
@@ -1656,8 +1601,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
       return this.masterPlaylistLoader_.load(isFinalRendition);
     }
     // Blacklist this playlist
-    currentPlaylist.excludeUntil = Date.now() +
-      (blacklistDuration ? blacklistDuration : this.blacklistDuration) * 1000;
+    currentPlaylist.excludeUntil = Date.now() + this.blacklistDuration * 1000;
     this.tech_.trigger('blacklistplaylist');
     this.tech_.trigger({type: 'usage', name: 'hls-rendition-blacklisted'});
 
@@ -1728,8 +1672,15 @@ export class MasterPlaylistController extends videojs.EventTarget {
       this.subtitleSegmentLoader_.abort();
     }
 
-    // start segment loader loading in case they are paused
-    this.load();
+    if (!this.tech_.paused()) {
+      this.mainSegmentLoader_.load();
+      if (this.audioPlaylistLoader_) {
+        this.audioSegmentLoader_.load();
+      }
+      if (this.subtitlePlaylistLoader_) {
+        this.subtitleSegmentLoader_.load();
+      }
+    }
   }
 
   /**
