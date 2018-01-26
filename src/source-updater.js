@@ -19,8 +19,21 @@ const noop = function() {};
  */
 export default class SourceUpdater {
   constructor(mediaSource, mimeType) {
+
+    let sourceBufferCreated = false;
+
     let createSourceBuffer = () => {
+
+      if (sourceBufferCreated) {
+        videojs.log.
+          warn('SourceBuffer creation attempt blocked:',
+            'already called addSourceBuffer for this SourceUpdater');
+        return;
+      }
+
       this.sourceBuffer_ = mediaSource.addSourceBuffer(mimeType);
+
+      sourceBufferCreated = true;
 
       // run completion handlers and process callbacks as updateend
       // events fire
@@ -41,6 +54,16 @@ export default class SourceUpdater {
       this.runCallback_();
     };
 
+    // Fixes https://github.com/videojs/videojs-contrib-hls/issues/963
+    // We run this on the next tick as it seems
+    // that sometimes when the `open` event is triggered, or when
+    // the readyState indicates open, the
+    // MediaSource is actually not ready yet to accept
+    // calls to its `addSourceBuffer` method.
+    // However when state is settled on the next tick,
+    // it is safe to do so.
+    const createSourceBufferDeferred = () => setTimeout(createSourceBuffer, 50);
+
     this.callbacks_ = [];
     this.pendingCallback_ = null;
     this.timestampOffset_ = 0;
@@ -48,9 +71,11 @@ export default class SourceUpdater {
     this.processedAppend_ = false;
 
     if (mediaSource.readyState === 'closed') {
-      mediaSource.addEventListener('sourceopen', createSourceBuffer);
+      mediaSource.addEventListener('sourceopen', () => {
+        createSourceBufferDeferred()
+      });
     } else {
-      createSourceBuffer();
+      createSourceBufferDeferred()
     }
   }
 
