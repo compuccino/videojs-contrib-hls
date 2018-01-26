@@ -589,7 +589,7 @@ export class MasterPlaylistController extends videojs.EventTarget {
 
     this.lastSelectedPlaylist_ = playlist;
 
-    console.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
+    //console.log('MasterPlaylistController.selectPlaylist attributes:', playlist.attributes);
 
     return playlist;
   }
