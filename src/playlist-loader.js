@@ -2,7 +2,7 @@
  * @module playlist-loader
  *
  * @file A state machine that manages the loading, caching, and updating of
- * M3U8 playlists.
+ * M3U8 playlists. test
  */
 import resolveUrl from './resolve-url';
 import { mergeOptions, EventTarget, log } from 'video.js';
