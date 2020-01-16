@@ -8,7 +8,7 @@
 import resolveUrl from './resolve-url';
 import { mergeOptions, EventTarget, log } from 'video.js';
 import { isEnabled } from './playlist.js';
-import m3u8 from 'm3u8-parser';
+import * as m3u8 from 'm3u8-parser';
 import window from 'global/window';
 
 /**

@@ -43,19 +43,19 @@
         .append('<option value="' + i + '">' + description + '</option>');
     }
 
-    var audioTracks = player.audioTracks(); 
+    var audioTracks = player.audioTracks();
     for (var i = 0; i < audioTracks.length; i++) {
       $('#audio-track-menu')
         .append('<option value="' + i + '">' + audioTracks[i].label + '</option>');
     }
 
-    var videoTracks = player.videoTracks(); 
+    var videoTracks = player.videoTracks();
     for (var i = 0; i < videoTracks.length; i++) {
       $('#video-track-menu')
         .append('<option value="' + i + '">' + videoTracks[i].label + '</option>');
     }
 
-    var textTracks = player.textTracks(); 
+    var textTracks = player.textTracks();
     for (var i = 0; i < textTracks.length; i++) {
       $('#text-track-menu')
         .append('<option value="' + i + '">' + textTracks[i].label + '</option>');
