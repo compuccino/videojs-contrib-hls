@@ -1,4 +1,4 @@
-# CONTRIBUTING
+# CONTRIBUTING foo
 
 We welcome contributions from everyone!
 
